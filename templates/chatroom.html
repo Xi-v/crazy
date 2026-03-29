@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Room</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+    <div id="messages"></div>
+
+    <input type="text" id="msg-input" placeholder="Type a message...">
+    <button onclick="sendMessage()">Send</button>
+
+    <input type="file" id="img-input" accept="image/*">
+    <button onclick="sendImage()">Send Image</button>
+
+    <script>
+        const socket = io();
+        const username = "{{ username }}";
+
+        socket.on("message", (data) => {
+            const div = document.createElement("div");
+            if (data.type === "image") {
+                div.innerHTML = `<strong>${data.username}:</strong><br>
+                                 <img src="${data.url}" style="max-width:300px;">`;
+            } else {
+                div.textContent = data.username + ": " + data.text;
+            }
+            document.getElementById("messages").appendChild(div);
+        });
+
+        function sendMessage() {
+            const input = document.getElementById("msg-input");
+            if (!input.value.trim()) return;
+            socket.emit("message", { type: "text", username, text: input.value });
+            input.value = "";
+        }
+
+        async function sendImage() {
+            const fileInput = document.getElementById("img-input");
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append("image", file);
+
+            const res = await fetch("/upload", { method: "POST", body: formData });
+            const data = await res.json();
+
+            if (data.url) {
+                socket.emit("message", { type: "image", username, url: data.url });
+            }
+
+            fileInput.value = "";
+        }
+
+        document.getElementById("msg-input").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") sendMessage();
+        });
+    </script>
+</body>
+</html>
