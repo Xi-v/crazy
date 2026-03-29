@@ -4,35 +4,76 @@
     <meta charset="UTF-8">
     <title>Room</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div id="messages"></div>
-
     <input type="text" id="msg-input" placeholder="Type a message...">
     <button onclick="sendMessage()">Send</button>
-
     <input type="file" id="img-input" accept="image/*">
     <button onclick="sendImage()">Send Image</button>
 
     <script>
         const socket = io();
         const username = "{{ username }}";
+        const color = "{{ color }}";
 
-        socket.on("message", (data) => {
+        const SECRET = "{{ pasw }}";
+
+        async function getKey() {
+            const enc = new TextEncoder();
+            const keyMaterial = await crypto.subtle.importKey(
+                "raw", enc.encode(SECRET), "PBKDF2", false, ["deriveKey"]
+            );
+            return crypto.subtle.deriveKey(
+                { name: "PBKDF2", salt: enc.encode("chatroom-salt"), iterations: 100000, hash: "SHA-256" },
+                keyMaterial,
+                { name: "AES-GCM", length: 256 },
+                false,
+                ["encrypt", "decrypt"]
+            );
+        }
+
+        async function encrypt(text) {
+            const key = await getKey();
+            const enc = new TextEncoder();
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(text));
+            return btoa(String.fromCharCode(...iv)) + ":" + btoa(String.fromCharCode(...new Uint8Array(encrypted)));
+        }
+
+        async function decrypt(data) {
+            try {
+                const key = await getKey();
+                const [ivB64, encB64] = data.split(":");
+                const iv = Uint8Array.from(atob(ivB64), c => c.charCodeAt(0));
+                const encrypted = Uint8Array.from(atob(encB64), c => c.charCodeAt(0));
+                const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
+                return new TextDecoder().decode(decrypted);
+            } catch {
+                return "[undecryptable message]";
+            }
+        }
+
+        socket.on("message", async (data) => {
             const div = document.createElement("div");
             if (data.type === "image") {
-                div.innerHTML = `<strong>${data.username}:</strong><br>
+                div.innerHTML = `<strong style="color: ${data.color}">${data.username}:</strong><br>
                                  <img src="${data.url}" style="max-width:300px;">`;
             } else {
-                div.textContent = data.username + ": " + data.text;
+                const decrypted = await decrypt(data.text);
+                div.innerHTML = `<strong style="color: ${data.color}">${data.username}:</strong> ${decrypted}`;
             }
             document.getElementById("messages").appendChild(div);
+            const messages = document.getElementById("messages");
+            messages.scrollTop = messages.scrollHeight;
         });
 
-        function sendMessage() {
+        async function sendMessage() {
             const input = document.getElementById("msg-input");
             if (!input.value.trim()) return;
-            socket.emit("message", { type: "text", username, text: input.value });
+            const encrypted = await encrypt(input.value);
+            socket.emit("message", { type: "text", username, color, text: encrypted });
             input.value = "";
         }
 
@@ -40,17 +81,13 @@
             const fileInput = document.getElementById("img-input");
             const file = fileInput.files[0];
             if (!file) return;
-
             const formData = new FormData();
             formData.append("image", file);
-
             const res = await fetch("/upload", { method: "POST", body: formData });
             const data = await res.json();
-
             if (data.url) {
-                socket.emit("message", { type: "image", username, url: data.url });
+                socket.emit("message", { type: "image", username, color, url: data.url });
             }
-
             fileInput.value = "";
         }
 

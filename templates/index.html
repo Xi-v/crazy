@@ -10,6 +10,10 @@
     <form action="/login" method="POST">
         <input type="text" name="username" placeholder="Enter username">
         <input type="password" name="password" placeholder="Enter password">
+
+        <label for="color">Username color:</label>
+        <input type="color" name="color" id="color" value="#ff0000">
+
         <input type="submit" value="Check password & enter">
     </form>
     {% if error %}

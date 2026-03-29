@@ -34,20 +34,6 @@ def handle_connect():
 def home():
     return render_template("index.html")
 
-@app.route("/login", methods=["POST"])
-def login():
-    entered = request.form.get("password")
-    username = request.form.get("username")
-
-    if not username:
-        return render_template("index.html", error="Please enter a username.")
-    if entered == PASSWORD:
-        session["authenticated"] = True
-        session["username"] = username
-        return redirect(url_for("chatroom"))
-    else:
-        return render_template("index.html", error="Wrong password, try again.")
-
 @app.route("/upload", methods=["POST"])
 def upload():
     if not session.get("authenticated"):
@@ -62,11 +48,31 @@ def upload():
     file.save(os.path.join(UPLOAD_FOLDER, filename))
     return jsonify({"url": f"/static/uploads/{filename}"})
 
+@app.route("/login", methods=["POST"])
+def login():
+    entered = request.form.get("password")
+    username = request.form.get("username")
+    color = request.form.get("color", "#ff0000")
+
+    if not username:
+        return render_template("index.html", error="Please enter a username.")
+    if entered == PASSWORD:
+        session["authenticated"] = True
+        session["username"] = username
+        session["color"] = color
+        return redirect(url_for("chatroom"))
+    else:
+        return render_template("index.html", error="Wrong password, try again.")
+
 @app.route("/chatroom")
 def chatroom():
     if not session.get("authenticated"):
         return redirect(url_for("home"))
-    return render_template("chatroom.html", username=session["username"])
+    return render_template("chatroom.html", 
+        username=session["username"],
+        color=session["color"],
+        pasw=PASSWORD
+    )
 
 
 
